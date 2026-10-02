@@ -79,6 +79,36 @@ class TestEstimacao(unittest.TestCase):
         self.assertIsNone(p.engajamento())
 
 
+class TestRobustez(unittest.TestCase):
+    def test_winsorizar_limita_extremo_e_preserva_resto(self):
+        xs = [10, 11, 9, 10, 12, 10, 500]
+        ws = ps.winsorizar(xs)
+        self.assertEqual(ws[:-1], xs[:-1])
+        self.assertLess(ws[-1], 500)
+        self.assertGreater(ws[-1], 12)
+
+    def test_post_viral_nao_domina_pilar(self):
+        posts = ps.gerar_dados_sinteticos(80, semente=1)
+        viral = ps.Post(date(2026, 7, 5), 10, "instagram", "lancamento", "imagem", 80, 14, 7, 89, 1)
+        normais = [ps.Post(date(2026, 7, d), 10, "instagram", "lancamento", "imagem", 100, 3, 0, 0, 0)
+                   for d in range(6, 9)]
+        robusto = ps.planejar(posts + [viral] + normais, metrica="taxa")
+        cru = ps.planejar(posts + [viral] + normais, metrica="taxa", robusto=False)
+        self.assertLess(robusto.mix["lancamento"], cru.mix["lancamento"])
+        self.assertTrue(any(p is viral for p, _, _ in robusto.outliers))  # continua sinalizado
+
+    def test_metricas(self):
+        p = ps.Post(date(2026, 1, 1), 10, "ig", "x", "reels", 200, 10, 2, 1, 1)
+        self.assertAlmostEqual(p.valor("interacoes"), 10 + 6 + 5 + 4)
+        self.assertAlmostEqual(p.valor("taxa"), 100 * 25 / 200)
+        self.assertEqual(p.valor("alcance"), 200)
+        for m in ps.METRICAS:
+            self.assertEqual(len(ps.planejar(ps.gerar_dados_sinteticos(), metrica=m).calendario), 5)
+
+    def test_faixas(self):
+        self.assertEqual([ps.faixa(h) for h in (3, 9, 15, 21)], ["madrugada", "manhã", "tarde", "noite"])
+
+
 class TestPipeline(unittest.TestCase):
     def test_demo_ponta_a_ponta(self):
         posts = ps.gerar_dados_sinteticos()

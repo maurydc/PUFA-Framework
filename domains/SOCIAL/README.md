@@ -45,6 +45,9 @@ usada nas recomendações.
 
 ### 1.2 Axiomas
 
+- **S0 (Escolha do observável).** A métrica otimizada é uma de: *taxa* (engajamento/alcance, %),
+  *interações* (volume absoluto ponderado) ou *alcance*. A escolha é gerencial e muda o $H$;
+  taxa favorece posts de alcance pequeno, alcance favorece formatos distribuídos pelo algoritmo (ex.: Reels).
 - **S1 (Engajamento ponderado).** Para cada post, $e = 100\cdot\sum_i w_i x_i/\text{alcance}$, com
   pesos $w = (1, 3, 5, 4)$ para (curtidas, comentários, compartilhamentos, salvamentos).
   *Escolha de modelagem — ajustável, não derivada.*
@@ -97,8 +100,14 @@ $\beta \to \infty$ dá o estado fundamental (todo o volume no melhor pilar, expl
 O estimador encolhido tem erro quadrático médio menor que as médias brutas para $K \ge 3$ (Stein, 1956;
 Efron–Morris, 1973). Quando $\hat\tau^2 \le 0$ os dados não distinguem os grupos e a estimativa colapsa em $\mu$.
 
-**Proposição 6 [REQUER HIPÓTESE: sem interação dia × hora].** O ranking de horários é aditivo:
-$\hat e(d,h) = \hat e_{\text{dia}}(d) + \hat e_{\text{hora}}(h) - \mu$.
+**Proposição 6 [REQUER HIPÓTESE: sem interação dia × faixa].** O ranking de horários é aditivo:
+$\hat e(d,h) = \hat e_{\text{dia}}(d) + \hat e_{\text{faixa}}(h) - \mu$, com faixas
+madrugada (0–5h), manhã (6–11h), tarde (12–17h) e noite (18–23h).
+
+**Proposição 6b [REQUER HIPÓTESE: extremos não recorrentes].** Antes da estimação, cada valor é limitado a
+$\text{mediana} \pm 3{,}5\,\mathrm{MAD}/0{,}6745$ (winsorização). Sem isso, um único post viral define
+sozinho a média do seu pilar — efeito observado no primeiro teste com dados reais. Os valores brutos continuam
+sendo usados na detecção de outliers.
 
 **Proposição 7 [REQUER HIPÓTESE: retorno marginal decrescente linear].** Com fadiga $\lambda > 0$,
 $z_k \mapsto z_k - \lambda K(s_k - 1/K)$, onde $s_k$ é a participação do pilar nas últimas 4 semanas.

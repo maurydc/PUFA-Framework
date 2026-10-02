@@ -1,28 +1,31 @@
 # Relatório PUFA-SOCIAL — Gestão de Mídias Sociais
 
-Posts analisados: **120** · Engajamento = 100·Σwᵢxᵢ/alcance (ponderado).
+Posts analisados: **120** · Métrica otimizada: **engajamento ponderado / alcance (%)** · interações ponderadas: curtida 1, comentário 3, salvamento 4, compartilhamento 5.
+
+> **Avisos**
+> - 5 post(s) extremo(s) limitados (winsorização) para não dominar as médias.
 
 ## 1. Calendário sugerido (próxima semana)
 
 | Horário | Pilar | Formato |
 |---|---|---|
-| seg 18h | educativo | reels |
-| ter 18h | depoimento | carrossel |
-| qua 18h | educativo | reels |
-| qui 18h | bastidores | carrossel |
-| sex 18h | educativo | reels |
+| seg noite (~20h) | educativo | reels |
+| ter noite (~20h) | depoimento | carrossel |
+| qua noite (~20h) | educativo | reels |
+| qui noite (~20h) | bastidores | carrossel |
+| sex noite (~20h) | educativo | reels |
 
 ## 2. Mix de conteúdo (estado de Gibbs/KMS)
 
-β = **1.161** · número efetivo de pilares exp(S) = **3.00**
+β = **0.992** · número efetivo de pilares exp(S) = **3.00**
 
 | Pilar | Participação recomendada |
 |---|---:|
-| educativo | 61.9% |
-| depoimento | 17.4% |
-| bastidores | 14.0% |
-| humor | 4.6% |
-| produto | 2.1% |
+| educativo | 64.4% |
+| depoimento | 14.5% |
+| bastidores | 11.3% |
+| humor | 6.4% |
+| produto | 3.3% |
 
 *β baixo ⇒ mais exploração (testar pilares); β alto ⇒ concentrar no que já performa.*
 
@@ -30,51 +33,51 @@ Posts analisados: **120** · Engajamento = 100·Σwᵢxᵢ/alcance (ponderado).
 
 | Pilar | n | Média bruta (%) | Média encolhida (%) | ± EP |
 |---|---:|---:|---:|---:|
-| educativo | 23 | 5.04 | 4.47 | 0.34 |
-| depoimento | 25 | 4.27 | 4.13 | 0.34 |
-| bastidores | 27 | 4.14 | 4.07 | 0.33 |
-| humor | 21 | 3.47 | 3.78 | 0.35 |
-| produto | 24 | 3.06 | 3.57 | 0.34 |
+| educativo | 23 | 5.01 | 4.55 | 0.33 |
+| depoimento | 25 | 4.02 | 3.97 | 0.32 |
+| bastidores | 27 | 3.86 | 3.87 | 0.31 |
+| humor | 21 | 3.47 | 3.65 | 0.33 |
+| produto | 24 | 3.06 | 3.39 | 0.32 |
 
 ## 4. Desempenho por formato
 
 | Formato | n | Média bruta (%) | Média encolhida (%) | ± EP |
 |---|---:|---:|---:|---:|
-| reels | 27 | 5.66 | 5.45 | 0.40 |
-| carrossel | 32 | 4.53 | 4.47 | 0.37 |
-| imagem | 27 | 3.76 | 3.79 | 0.40 |
-| stories | 34 | 2.40 | 2.57 | 0.36 |
+| reels | 27 | 5.38 | 5.23 | 0.33 |
+| carrossel | 32 | 4.45 | 4.40 | 0.30 |
+| imagem | 27 | 3.60 | 3.63 | 0.33 |
+| stories | 34 | 2.40 | 2.52 | 0.30 |
 
 ## 5. Desempenho por plataforma
 
 | Plataforma | n | Média bruta (%) | Média encolhida (%) | ± EP |
 |---|---:|---:|---:|---:|
-| linkedin | 39 | 4.27 | 4.01 | 0.23 |
-| instagram | 52 | 3.85 | 4.01 | 0.23 |
-| tiktok | 29 | 3.94 | 4.01 | 0.23 |
+| linkedin | 39 | 4.07 | 3.89 | 0.19 |
+| instagram | 52 | 3.72 | 3.89 | 0.19 |
+| tiktok | 29 | 3.94 | 3.89 | 0.19 |
 
-## 6. Melhores horários (top 10)
+## 6. Melhores dias/faixas horárias (top 10)
 
-| Dia/hora | n | Média bruta (%) | Média encolhida (%) | ± EP |
+| Dia/faixa | n | Média bruta (%) | Média encolhida (%) | ± EP |
 |---|---:|---:|---:|---:|
-| seg 18h | 4 | 3.28 | 4.53 | 0.40 |
-| ter 18h | 3 | 3.76 | 4.53 | 0.40 |
-| qua 18h | 5 | 7.14 | 4.53 | 0.40 |
-| qui 18h | 2 | 4.63 | 4.53 | 0.40 |
-| sex 18h | 3 | 3.62 | 4.53 | 0.40 |
-| sab 18h | 3 | 3.87 | 4.53 | 0.40 |
-| dom 18h | 4 | 8.28 | 4.53 | 0.40 |
-| seg 20h | 1 | 5.95 | 4.13 | 0.40 |
-| ter 20h | 4 | 4.88 | 4.13 | 0.40 |
-| qua 20h | 4 | 4.21 | 4.13 | 0.40 |
+| seg noite | 8 | 3.54 | 3.93 | 0.21 |
+| ter noite | 10 | 4.30 | 3.93 | 0.21 |
+| qua noite | 13 | 4.73 | 3.93 | 0.21 |
+| qui noite | 10 | 3.92 | 3.93 | 0.21 |
+| sex noite | 8 | 4.10 | 3.93 | 0.21 |
+| sab noite | 10 | 3.86 | 3.93 | 0.21 |
+| dom noite | 11 | 4.55 | 3.93 | 0.21 |
+| seg tarde | 3 | 2.32 | 3.87 | 0.21 |
+| ter tarde | 3 | 3.42 | 3.87 | 0.21 |
+| qua tarde | 1 | 6.00 | 3.87 | 0.21 |
 
 ## 7. Tendência
 
-Inclinação: **+0.099 p.p./semana** (alta) sobre 18 semanas.
+Inclinação: **+0.115 %/semana** (alta) sobre 18 semanas com posts.
 
 ## 8. Posts fora da curva (z robusto > 3.5)
 
-| Data | Pilar | Formato | Plataforma | Engaj. (%) | z |
+| Data | Pilar | Formato | Plataforma | Valor (%) | z |
 |---|---|---|---|---:|---:|
 | 2026-07-01 18h | bastidores | reels | linkedin | 16.78 | +8.1 |
 | 2026-06-14 18h | depoimento | imagem | instagram | 12.96 | +5.8 |

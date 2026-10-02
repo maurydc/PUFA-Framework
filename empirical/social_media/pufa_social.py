@@ -36,13 +36,27 @@ import statistics
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
+
+Valor = Callable[["Post"], Optional[float]]
 
 DIAS = ["seg", "ter", "qua", "qui", "sex", "sab", "dom"]
 
 # Pesos das interações: ações de maior custo cognitivo valem mais.
 # Hipótese de modelagem explícita (ajustável via CLI), não derivada dos axiomas.
 PESOS_PADRAO = {"curtidas": 1.0, "comentarios": 3.0, "compartilhamentos": 5.0, "salvamentos": 4.0}
+
+METRICAS = {"taxa": "engajamento ponderado / alcance (%)",
+            "interacoes": "interações ponderadas por post",
+            "alcance": "contas alcançadas por post"}
+
+# Faixas horárias: com poucos posts, hora exata fragmenta demais os dados.
+FAIXAS = [("madrugada", 0, 5), ("manhã", 6, 11), ("tarde", 12, 17), ("noite", 18, 23)]
+
+
+def faixa(hora: int) -> str:
+    return next(nome for nome, a, b in FAIXAS if a <= hora <= b)
+
 
 COLUNAS = [
     "data", "hora", "plataforma", "pilar", "formato",
@@ -77,6 +91,16 @@ class Post:
             return None
         bruto = sum(pesos[k] * getattr(self, k) for k in pesos)
         return 100.0 * bruto / self.alcance
+
+    def valor(self, metrica: str = "taxa", pesos: Dict[str, float] = PESOS_PADRAO) -> Optional[float]:
+        """Observável escolhido: taxa (%), interações ponderadas absolutas, ou alcance."""
+        if metrica == "taxa":
+            return self.engajamento(pesos)
+        if metrica == "interacoes":
+            return sum(pesos[k] * getattr(self, k) for k in pesos)
+        if metrica == "alcance":
+            return self.alcance
+        raise ValueError(f"métrica desconhecida: {metrica}")
 
 
 def ler_csv(caminho: str) -> List[Post]:
@@ -200,6 +224,22 @@ def encolhimento(grupos: Dict[str, List[float]]) -> List[Estimativa]:
     return saida
 
 
+def winsorizar(valores: Sequence[float], limiar: float = 3.5) -> List[float]:
+    """
+    Corta cada valor em mediana ± limiar·MAD/0.6745 (mesmo critério do z robusto).
+    [REQUER HIPÓTESE] posts extremos são eventos raros que não se repetem na mesma escala;
+    sem isso, um único post viral define sozinho a média do grupo.
+    """
+    if len(valores) < 5:
+        return list(valores)
+    med = statistics.median(valores)
+    mad = statistics.median([abs(x - med) for x in valores])
+    if mad < 1e-12:
+        return list(valores)
+    r = limiar * mad / 0.6745
+    return [min(max(x, med - r), med + r) for x in valores]
+
+
 # ---------------------------------------------------------------------------
 # Estado de Gibbs / KMS sobre M_K(C)
 # ---------------------------------------------------------------------------
@@ -261,22 +301,23 @@ def energia_livre(z: Sequence[float], p: Sequence[float], beta: float) -> float:
 # Horários, calendário, outliers, tendência
 # ---------------------------------------------------------------------------
 
-def ranking_slots(posts: Sequence[Post], pesos=PESOS_PADRAO) -> List[Estimativa]:
+def ranking_slots(posts: Sequence[Post], v: Valor) -> List[Estimativa]:
     """
     Modelo aditivo: ê(d,h) = ê_dia(d) + ê_hora(h) − μ, cada efeito com encolhimento próprio.
     [REQUER HIPÓTESE] ausência de interação dia×hora. Usa ~K vezes mais dados por
     parâmetro que o ajuste célula a célula e permite pontuar combinações nunca testadas.
     """
-    validos = [(p, p.engajamento(pesos)) for p in posts]
+    validos = [(p, v(p)) for p in posts]
     validos = [(p, e) for p, e in validos if e is not None]
     if not validos:
         return []
     mu = statistics.fmean(e for _, e in validos)
-    dias = {e.grupo: e for e in encolhimento(_agrupar([p for p, _ in validos], lambda p: p.dia_semana, pesos))}
-    horas = {e.grupo: e for e in encolhimento(_agrupar([p for p, _ in validos], lambda p: f"{p.hora:02d}h", pesos))}
+    so_posts = [p for p, _ in validos]
+    dias = {e.grupo: e for e in encolhimento(_agrupar(so_posts, lambda p: p.dia_semana, v))}
+    horas = {e.grupo: e for e in encolhimento(_agrupar(so_posts, lambda p: faixa(p.hora), v))}
     celulas: Dict[str, List[float]] = defaultdict(list)
     for p, e in validos:
-        celulas[f"{p.dia_semana} {p.hora:02d}h"].append(e)
+        celulas[f"{p.dia_semana} {faixa(p.hora)}"].append(e)
     saida = []
     for d in DIAS:
         if d not in dias:
@@ -331,13 +372,14 @@ def escolher_slots(slots: Sequence[Estimativa], n_posts: int) -> List[str]:
         if len(escolhidos) >= n_posts:
             break
     ordem = {d: i for i, d in enumerate(DIAS)}
-    escolhidos.sort(key=lambda g: (ordem[g.split()[0]], g.split()[1]))
+    ordem_f = {nome: i for i, (nome, _, _) in enumerate(FAIXAS)}
+    escolhidos.sort(key=lambda g: (ordem[g.split()[0]], ordem_f.get(g.split()[1], 9)))
     return escolhidos
 
 
-def outliers(posts: Sequence[Post], pesos=PESOS_PADRAO, limiar: float = 3.5) -> List[Tuple[Post, float, float]]:
+def outliers(posts: Sequence[Post], v: Valor, limiar: float = 3.5) -> List[Tuple[Post, float, float]]:
     """z robusto (Iglewicz–Hoaglin): z = 0.6745 (x − mediana)/MAD."""
-    pares = [(p, p.engajamento(pesos)) for p in posts]
+    pares = [(p, v(p)) for p in posts]
     pares = [(p, e) for p, e in pares if e is not None]
     if len(pares) < 5:
         return []
@@ -350,11 +392,11 @@ def outliers(posts: Sequence[Post], pesos=PESOS_PADRAO, limiar: float = 3.5) -> 
     return sorted([t for t in saida if abs(t[2]) > limiar], key=lambda t: -t[2])
 
 
-def tendencia_semanal(posts: Sequence[Post], pesos=PESOS_PADRAO) -> Optional[Tuple[float, int]]:
-    """Inclinação (pontos percentuais / semana) por mínimos quadrados sobre médias semanais."""
+def tendencia_semanal(posts: Sequence[Post], v: Valor) -> Optional[Tuple[float, int]]:
+    """Inclinação (unidades da métrica / semana) por mínimos quadrados sobre médias semanais."""
     sem: Dict[int, List[float]] = defaultdict(list)
     for p in posts:
-        e = p.engajamento(pesos)
+        e = v(p)
         if e is not None:
             sem[p.data.toordinal() // 7].append(e)
     if len(sem) < 3:
@@ -384,13 +426,15 @@ class Plano:
     tendencia: Optional[Tuple[float, int]]
     n_posts: int
     fadiga: float = 0.0
+    metrica: str = "taxa"
+    n_winsorizados: int = 0
     avisos: List[str] = field(default_factory=list)
 
 
-def _agrupar(posts: Sequence[Post], chave, pesos) -> Dict[str, List[float]]:
+def _agrupar(posts: Sequence[Post], chave, v: Valor) -> Dict[str, List[float]]:
     g: Dict[str, List[float]] = defaultdict(list)
     for p in posts:
-        e = p.engajamento(pesos)
+        e = v(p)
         if e is not None:
             g[chave(p)].append(e)
     return g
@@ -398,9 +442,12 @@ def _agrupar(posts: Sequence[Post], chave, pesos) -> Dict[str, List[float]]:
 
 def planejar(posts: Sequence[Post], posts_semana: int = 5, n_efetivo: Optional[float] = None,
              beta: Optional[float] = None, fadiga: float = 0.0, janela_fadiga_dias: int = 28,
-             pesos: Dict[str, float] = PESOS_PADRAO) -> Plano:
+             pesos: Dict[str, float] = PESOS_PADRAO, metrica: str = "taxa",
+             robusto: bool = True) -> Plano:
     if not posts:
         raise ValueError("Nenhum post fornecido.")
+    if metrica not in METRICAS:
+        raise ValueError(f"métrica deve ser uma de {sorted(METRICAS)}")
     avisos = []
     validos = [p for p in posts if p.engajamento(pesos) is not None]
     if len(validos) < len(posts):
@@ -408,9 +455,23 @@ def planejar(posts: Sequence[Post], posts_semana: int = 5, n_efetivo: Optional[f
     if len(validos) < 30:
         avisos.append("Menos de 30 posts válidos: estimativas com alta incerteza.")
 
-    pilares = encolhimento(_agrupar(validos, lambda p: p.pilar, pesos))
-    formatos = encolhimento(_agrupar(validos, lambda p: p.formato, pesos))
-    plataformas = encolhimento(_agrupar(validos, lambda p: p.plataforma, pesos))
+    def bruto(p: Post) -> Optional[float]:
+        return p.valor(metrica, pesos)
+
+    # Estimação usa valores winsorizados; detecção de outliers usa os brutos.
+    xs = [bruto(p) for p in validos]
+    ws = winsorizar(xs) if robusto else xs
+    tabela_w = {id(p): w for p, w in zip(validos, ws)}
+    n_wins = sum(1 for x, w in zip(xs, ws) if x != w)
+    if n_wins:
+        avisos.append(f"{n_wins} post(s) extremo(s) limitados (winsorização) para não dominar as médias.")
+
+    def v(p: Post) -> Optional[float]:
+        return tabela_w.get(id(p))
+
+    pilares = encolhimento(_agrupar(validos, lambda p: p.pilar, v))
+    formatos = encolhimento(_agrupar(validos, lambda p: p.formato, v))
+    plataformas = encolhimento(_agrupar(validos, lambda p: p.plataforma, v))
 
     nomes = [e.grupo for e in pilares]
     z = padronizar([e.media_encolhida for e in pilares])
@@ -431,25 +492,39 @@ def planejar(posts: Sequence[Post], posts_semana: int = 5, n_efetivo: Optional[f
     p = gibbs(z, beta)
     mix = dict(zip(nomes, p))
 
-    slots = ranking_slots(validos, pesos)
+    slots = ranking_slots(validos, v)
     escolhidos = escolher_slots(slots, posts_semana)
     if len(escolhidos) < posts_semana:
         avisos.append("Poucos horários distintos no histórico; calendário parcial.")
     seq = ordenar_sem_repeticao(alocar(len(escolhidos), mix))
     # Formato: alterna entre os dois melhores para manter variedade.
     top_fmt = [f.grupo for f in formatos[:2]] or ["-"]
-    calendario = [(s, pil, top_fmt[i % len(top_fmt)]) for i, (s, pil) in enumerate(zip(escolhidos, seq))]
+    # Hora sugerida dentro da faixa: mediana das horas já usadas nela (fallback: meio da faixa).
+    horas_faixa: Dict[str, List[int]] = defaultdict(list)
+    for q in validos:
+        horas_faixa[faixa(q.hora)].append(q.hora)
+    meio = {nome: (a + b) // 2 for nome, a, b in FAIXAS}
+
+    def rotulo(slot: str) -> str:
+        f = slot.split()[1]
+        h = int(statistics.median(horas_faixa[f])) if horas_faixa[f] else meio[f]
+        return f"{slot} (~{h:02d}h)"
+
+    calendario = [(rotulo(s), pil, top_fmt[i % len(top_fmt)]) for i, (s, pil) in enumerate(zip(escolhidos, seq))]
 
     return Plano(
         pilares=pilares, formatos=formatos, plataformas=plataformas, mix=mix, beta=beta,
         n_efetivo=math.exp(entropia(p)), slots=slots, calendario=calendario,
-        outliers=outliers(validos, pesos), tendencia=tendencia_semanal(validos, pesos),
-        n_posts=len(validos), fadiga=fadiga, avisos=avisos,
+        outliers=outliers(validos, bruto), tendencia=tendencia_semanal(validos, v),
+        n_posts=len(validos), fadiga=fadiga, metrica=metrica, n_winsorizados=n_wins, avisos=avisos,
     )
 
 
-def _tabela(estimativas: Sequence[Estimativa], titulo: str, limite: int = 99) -> List[str]:
-    linhas = [f"| {titulo} | n | Média bruta (%) | Média encolhida (%) | ± EP |",
+UNIDADE = {"taxa": "%", "interacoes": "inter.", "alcance": "contas"}
+
+
+def _tabela(estimativas: Sequence[Estimativa], titulo: str, limite: int = 99, unidade: str = "%") -> List[str]:
+    linhas = [f"| {titulo} | n | Média bruta ({unidade}) | Média encolhida ({unidade}) | ± EP |",
               "|---|---:|---:|---:|---:|"]
     for e in estimativas[:limite]:
         bruta = "—" if math.isnan(e.media_bruta) else f"{e.media_bruta:.2f}"
@@ -459,7 +534,9 @@ def _tabela(estimativas: Sequence[Estimativa], titulo: str, limite: int = 99) ->
 
 def relatorio(plano: Plano) -> str:
     L: List[str] = ["# Relatório PUFA-SOCIAL — Gestão de Mídias Sociais", ""]
-    L.append(f"Posts analisados: **{plano.n_posts}** · Engajamento = 100·Σwᵢxᵢ/alcance (ponderado).")
+    u = UNIDADE[plano.metrica]
+    L.append(f"Posts analisados: **{plano.n_posts}** · Métrica otimizada: **{METRICAS[plano.metrica]}** "
+             "· interações ponderadas: curtida 1, comentário 3, salvamento 4, compartilhamento 5.")
     L.append("")
     if plano.avisos:
         L += ["> **Avisos**"] + [f"> - {a}" for a in plano.avisos] + [""]
@@ -477,23 +554,23 @@ def relatorio(plano: Plano) -> str:
         L.append(f"| {k} | {100 * v:.1f}% |")
     L += ["", "*β baixo ⇒ mais exploração (testar pilares); β alto ⇒ concentrar no que já performa.*", ""]
 
-    L += ["## 3. Desempenho por pilar", ""] + _tabela(plano.pilares, "Pilar") + [""]
-    L += ["## 4. Desempenho por formato", ""] + _tabela(plano.formatos, "Formato") + [""]
-    L += ["## 5. Desempenho por plataforma", ""] + _tabela(plano.plataformas, "Plataforma") + [""]
-    L += ["## 6. Melhores horários (top 10)", ""] + _tabela(plano.slots, "Dia/hora", 10) + [""]
+    L += ["## 3. Desempenho por pilar", ""] + _tabela(plano.pilares, "Pilar", unidade=u) + [""]
+    L += ["## 4. Desempenho por formato", ""] + _tabela(plano.formatos, "Formato", unidade=u) + [""]
+    L += ["## 5. Desempenho por plataforma", ""] + _tabela(plano.plataformas, "Plataforma", unidade=u) + [""]
+    L += ["## 6. Melhores dias/faixas horárias (top 10)", ""] + _tabela(plano.slots, "Dia/faixa", 10, u) + [""]
 
     L += ["## 7. Tendência", ""]
     if plano.tendencia:
         incl, n = plano.tendencia
         direcao = "alta" if incl > 0 else "queda"
-        L.append(f"Inclinação: **{incl:+.3f} p.p./semana** ({direcao}) sobre {n} semanas.")
+        L.append(f"Inclinação: **{incl:+.3f} {u}/semana** ({direcao}) sobre {n} semanas com posts.")
     else:
         L.append("Histórico insuficiente (< 3 semanas).")
     L.append("")
 
     L += ["## 8. Posts fora da curva (z robusto > 3.5)", ""]
     if plano.outliers:
-        L += ["| Data | Pilar | Formato | Plataforma | Engaj. (%) | z |", "|---|---|---|---|---:|---:|"]
+        L += [f"| Data | Pilar | Formato | Plataforma | Valor ({u}) | z |", "|---|---|---|---|---:|---:|"]
         for p, e, zz in plano.outliers[:15]:
             L.append(f"| {p.data} {p.hora:02d}h | {p.pilar} | {p.formato} | {p.plataforma} | {e:.2f} | {zz:+.1f} |")
         L.append("")
@@ -515,6 +592,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     help="Diversidade alvo: número efetivo de pilares exp(S). Padrão: max(2, 0.6·K).")
     ap.add_argument("--beta", type=float, default=None, help="Fixa β (ignora --n-efetivo).")
     ap.add_argument("--fadiga", type=float, default=0.0, help="Penalidade de saturação λ ≥ 0.")
+    ap.add_argument("--metrica", choices=sorted(METRICAS), default="taxa",
+                    help="taxa: engajamento/alcance; interacoes: volume absoluto; alcance: distribuição.")
+    ap.add_argument("--sem-robustez", action="store_true", help="Desliga a winsorização de posts extremos.")
     ap.add_argument("--saida", help="Arquivo Markdown de saída (padrão: stdout).")
     ap.add_argument("--exportar-demo", help="Salva o CSV sintético neste caminho e sai.")
     a = ap.parse_args(argv)
@@ -526,7 +606,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if not a.csv and not a.demo:
         ap.error("informe --csv ARQUIVO ou --demo")
     posts = gerar_dados_sinteticos() if a.demo else ler_csv(a.csv)
-    plano = planejar(posts, a.posts_semana, a.n_efetivo, a.beta, a.fadiga)
+    plano = planejar(posts, a.posts_semana, a.n_efetivo, a.beta, a.fadiga,
+                     metrica=a.metrica, robusto=not a.sem_robustez)
     texto = relatorio(plano)
     if a.saida:
         with open(a.saida, "w", encoding="utf-8") as f:
